@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Kokoro TTS Test</title>
+</head>
+
+<body>
+    <h1>Kokoro TTS Test</h1>
+    <button id="btn">Speak</button>
+    <div id="status">Loading...</div>
+    <script type="module">
+        import { KokoroTTS } from 'https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/dist/kokoro.min.js';
+
+        const statusEl = document.getElementById('status');
+        let tts = null;
+
+        async function init() {
+            try {
+                // Initialize Kokoro TTS
+                const model_id = "onnx-community/Kokoro-82M-ONNX";
+                tts = await KokoroTTS.from_pretrained(model_id, {
+                    dtype: "q8",
+                });
+                statusEl.textContent = 'Ready';
+            } catch (e) {
+                statusEl.textContent = 'Error: ' + e.message;
+                console.error(e);
+            }
+        }
+
+        init();
+
+        document.getElementById('btn').addEventListener('click', async () => {
+            if (!tts) return;
+            statusEl.textContent = 'Synthesizing...';
+            try {
+                const audio = await tts.generate("Hello world, this is Kokoro TTS running in the browser using transformers dot JS.", {
+                    voice: "af_heart",
+                });
+                audio.play();
+                statusEl.textContent = 'Done and playing';
+            } catch (e) {
+                statusEl.textContent = 'Generation Error: ' + e.message;
+                console.error(e);
+            }
+        });
+    </script>
+</body>
+
+</html>
