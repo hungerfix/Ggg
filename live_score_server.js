@@ -1905,6 +1905,23 @@ const server = http.createServer(async (req, res) => {
       }
       return;
 
+      // Serve the MP3 file from root if directly requested
+    } else if (pathname === '/Crowd_Noise.mp3') {
+      const assetPath = path.join(__dirname, 'Crowd_Noise.mp3');
+      if (fs.existsSync(assetPath)) {
+        res.writeHead(200, {
+          'Content-Type': 'audio/mpeg',
+          'Content-Length': fs.statSync(assetPath).size,
+          'Accept-Ranges': 'bytes',
+          'Cache-Control': 'public, max-age=3600'
+        });
+        fs.createReadStream(assetPath).pipe(res);
+      } else {
+        res.writeHead(404);
+        res.end('{"error":"MP3 file not found"}');
+      }
+      return;
+
     } else {
       res.writeHead(404);
       res.end('{"error":"Not found"}');

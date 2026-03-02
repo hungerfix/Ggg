@@ -772,7 +772,7 @@
         /* ===== STADIUM SECTION ===== */
         .stadium-section {
             position: relative;
-            height: 220px;
+            height: 308px;
             overflow: hidden;
             background: linear-gradient(180deg, #060f1e 0%, #0a1a35 50%, #0d2040 100%);
         }
@@ -1904,10 +1904,26 @@
             object-fit: contain;
             display: block;
         }
+
+        /* GIF image display - shown directly */
+        #ballEventGif {
+            width: 60%;
+            height: 60%;
+            object-fit: contain;
+            display: block;
+            margin: auto;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
     </style>
 
     <!-- Socket.io for TTS playback -->
     <script src="/socket.io/socket.io.js"></script>
+
+    <!-- Lottie-light for animations -->
+    <script src="https://cdn.jsdelivr.net/npm/lottie-light@2.1.0/dist/lottie-light.min.js"></script>
 </head>
 
 <body>
@@ -1998,6 +2014,11 @@
 
             <div class="last-ball-center" id="lastBallCenter"
                 style="position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 10; flex-direction: row; gap: 8px;">
+            </div>
+
+            <!-- Lottie Animation Container -->
+            <div id="lottieAnimation"
+                style="position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); width: 200px; height: 200px; z-index: 5; display: none;">
             </div>
 
             <!-- Crowd silhouette -->
@@ -2100,6 +2121,8 @@
                 <video id="ballEventVideo" muted playsinline preload="none" crossorigin="anonymous"></video>
                 <!-- Canvas renders the chroma-keyed output -->
                 <canvas id="ballEventCanvas"></canvas>
+                <!-- GIF image for displaying animated GIFs -->
+                <img id="ballEventGif" alt="Ball event animation">
             </div>
         </div>
 
@@ -2189,17 +2212,19 @@
                 <div class="over-equals">= 11</div>
                 <div class="diamond-icon"></div>
             </div>
-            <!-- ===== TTS SUBTITLE DISPLAY ===== -->
-            <div class="tts-subtitle" id="ttsSubtitleBox">
-                <span class="tts-icon">🔊</span>
-                <span id="ttsSubtitleText"></span>
-            </div>
+            // ===== TTS SUBTITLE DISPLAY ===== */
+            /*
 
         </div>
 
         <!-- Hidden TTS audio element — plays StreamElements TTS directly -->
         <!-- autoplay attribute + muted trick helps bypass browser autoplay policy in OBS -->
         <audio id="ttsAudio" style="display:none;" preload="none"></audio>
+
+        <!-- Crowd noise audio - plays in loop -->
+        <audio id="crowdAudio" loop preload="auto">
+            <source src="/data/Crowd Noice.mp3" type="audio/mpeg">
+        </audio>
 
         <script src="/socket.io/socket.io.js"></script>
         <script>
@@ -2219,6 +2244,41 @@
 
             // Audio is always enabled — OBS Browser Source allows autoplay
             const ttsAudioEl = document.getElementById('ttsAudio');
+
+            // ===== CROWD NOISE - PLAY IN LOOP =====
+            const crowdAudioEl = document.getElementById('crowdAudio');
+            let audioEnabled = false;
+
+            function enableAudio() {
+                if (audioEnabled) return;
+                audioEnabled = true;
+                if (crowdAudioEl) {
+                    crowdAudioEl.volume = 0.3;
+                    crowdAudioEl.play().catch(() => { });
+                }
+                // Remove button after enabling
+                const btn = document.getElementById('enableAudioBtn');
+                if (btn) btn.remove();
+                console.log('[Audio] Enabled');
+            }
+
+            // Try to play automatically (works in OBS)
+            if (crowdAudioEl) {
+                crowdAudioEl.volume = 0.3;
+                crowdAudioEl.play().catch(() => {
+                    // Show enable button for browser environments
+                    showEnableAudioButton();
+                });
+            }
+
+            function showEnableAudioButton() {
+                const btn = document.createElement('button');
+                btn.id = 'enableAudioBtn';
+                btn.textContent = '🔊 Enable Sound';
+                btn.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999;padding:12px 20px;background:#28a745;color:white;border:none;border-radius:5px;cursor:pointer;font-size:14px;font-weight:bold;box-shadow:0 2px 8px rgba(0,0,0,0.3);';
+                btn.onclick = enableAudio;
+                document.body.appendChild(btn);
+            }
 
             // ===== ROBUST TTS ENGINE =====
             let availableVoices = [];
@@ -2425,7 +2485,7 @@
             });
 
             // TEST: Add test button for TTS
-            function addTestTTSButton() {
+            /*function addTestTTSButton() {
                 const btn = document.createElement('button');
                 btn.textContent = '🔊 Test TTS';
                 btn.style.cssText = 'position:fixed;top:10px;right:10px;z-index:9999;padding:10px 16px;background:#28a745;color:white;border:none;border-radius:5px;cursor:pointer;font-size:14px;font-weight:bold;box-shadow:0 2px 8px rgba(0,0,0,0.3);';
@@ -2435,7 +2495,7 @@
                 document.body.appendChild(btn);
                 console.log('[TTS] Test button ready');
             }
-            addTestTTSButton();
+            addTestTTSButton();*/
 
             const REFRESH_MS = 2000;
             const DEMO_FALLBACK_AFTER = 3;
@@ -3025,6 +3085,14 @@
                         lastBallCenter.innerHTML = `
                         <div class="last-ball-number ${colorClass}${popClass}">${displayValue}</div>
                         <div class="last-ball-desc">${displayLabel}</div>`;
+
+                        // Auto-hide score after 4 seconds (clear any existing timeout)
+                        if (window.scoreHideTimeout) clearTimeout(window.scoreHideTimeout);
+                        window.scoreHideTimeout = setTimeout(() => {
+                            if (lastBallCenter) {
+                                lastBallCenter.innerHTML = '';
+                            }
+                        }, 4000);
                     } else if (lastBallCenter) {
                         lastBallCenter.innerHTML = '';
                     }
@@ -3101,39 +3169,64 @@
             // Videos are shown ONLY inside the stadium section, with green background removed.
 
             const BALL_VIDEO_MAP = {
-                'w': 'out.mp4',
-                '6': '6.mp4',
-                '4': '4.mp4',
-                'wd': 'wide.mp4',
-                'wide': 'wide.mp4',
-                'nb': 'No_ball.mp4',
-                'noball': 'No_ball.mp4',
-                'lb': 'Leg-wide.mp4',
-                'legwide': 'Leg-wide.mp4',
-                'fh': 'free_hit.mp4',
-                'freehit': 'free_hit.mp4'
+                'w': 'Wicket/animations/12345.json',
+                '6': '6/animations/12345.json',
+                '4': '4/animations/12345.json',
+                'wd': 'wide/animations/12345.json',
+                'wide': 'wide/animations/12345.json',
+                'nb': 'wide/animations/12345.json',
+                'noball': 'wide/animations/12345.json',
+                'lb': 'wide/animations/12345.json',
+                'legwide': 'wide/animations/12345.json',
+                'fh': '4/animations/12345.json',
+                'freehit': '4/animations/12345.json'
             };
 
             const DATA_BASE_URL = (window.location.protocol === 'file:')
-                ? 'http://localhost:5555/data/video/'
-                : window.location.origin + '/data/video/';
+                ? 'http://localhost:5555/data/json/'
+                : window.location.origin + '/data/json/';
 
             const videoOverlay = document.getElementById('ballEventVideoOverlay');
             const videoEl = document.getElementById('ballEventVideo');
             const canvas = document.getElementById('ballEventCanvas');
+            const gifEl = document.getElementById('ballEventGif');
+            const lottieEl = document.getElementById('lottieAnimation');
+            let lottieAnim = null;
             const ctx = canvas ? canvas.getContext('2d', { willReadFrequently: true }) : null;
 
             let videoHideTimer = null;
             let chromaRafId = null;
             let lastPlayedBallKey = null;
 
-            // ---- Chroma key settings (tune these if needed) ----
-            // Removes pixels where green channel dominates red and blue by a threshold
-            const CHROMA_GREEN_THRESHOLD = 80;   // How much greener than R/B to count as green screen
-            const CHROMA_SIMILARITY = 0.35; // 0–1: higher = more aggressive removal
+            // ---- Chroma key settings (HSL-based for accurate green screen removal) ----
+            // Hue range for green (degrees): 70–170 covers all green shades
+            const CHROMA_HUE_MIN = 70;
+            const CHROMA_HUE_MAX = 170;
+            // Minimum saturation to be considered chromatic green (0–1)
+            const CHROMA_SAT_MIN = 0.15;
+            // Softness: controls edge blending width (higher = softer edges)
+            const CHROMA_EDGE_SOFTNESS = 20;
 
             /**
-             * Draw one frame of the video onto the canvas with green pixels made transparent.
+             * Convert RGB to HSL. Returns [h (0-360), s (0-1), l (0-1)].
+             */
+            function rgbToHsl(r, g, b) {
+                r /= 255; g /= 255; b /= 255;
+                const max = Math.max(r, g, b), min = Math.min(r, g, b);
+                const l = (max + min) / 2;
+                if (max === min) return [0, 0, l]; // achromatic
+                const d = max - min;
+                const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+                let h;
+                if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) * 60;
+                else if (max === g) h = ((b - r) / d + 2) * 60;
+                else h = ((r - g) / d + 4) * 60;
+                return [h, s, l];
+            }
+
+            /**
+             * Draw one frame of the video onto the canvas with green screen pixels made transparent.
+             * Uses HSL color space for accurate detection of all green shades.
              */
             function drawChromaFrame() {
                 if (!ctx || !videoEl || videoEl.paused || videoEl.ended || videoEl.readyState < 2) {
@@ -3156,15 +3249,37 @@
                     const g = data[i + 1];
                     const b = data[i + 2];
 
-                    // Green screen detection:
-                    // pixel is "green" if G is significantly larger than both R and B
-                    const isGreen = (g > r + CHROMA_GREEN_THRESHOLD) && (g > b + CHROMA_GREEN_THRESHOLD);
+                    // Quick reject: if green channel is not dominant at all, skip
+                    if (g <= r && g <= b) continue;
 
-                    if (isGreen) {
-                        // Soft edge: partial transparency based on how green the pixel is
-                        const greenness = Math.min(1, (g - Math.max(r, b)) / 255);
-                        const alpha = Math.max(0, 1 - greenness / CHROMA_SIMILARITY);
+                    const [h, s, l] = rgbToHsl(r, g, b);
+
+                    // Check if hue is in the green range
+                    if (h >= CHROMA_HUE_MIN && h <= CHROMA_HUE_MAX && s >= CHROMA_SAT_MIN) {
+                        // Compute how "deep" into the green zone this pixel is
+                        const hueCenter = (CHROMA_HUE_MIN + CHROMA_HUE_MAX) / 2;
+                        const hueRange = (CHROMA_HUE_MAX - CHROMA_HUE_MIN) / 2;
+                        const hueDistance = Math.abs(h - hueCenter);
+                        const hueFactor = 1 - (hueDistance / hueRange); // 1 at center, 0 at edges
+
+                        // Saturation factor: more saturated = more likely green screen
+                        const satFactor = Math.min(1, s / 0.4);
+
+                        // Green dominance factor (how much G exceeds R and B)
+                        const greenDominance = Math.min(1, (g - Math.max(r, b)) / CHROMA_EDGE_SOFTNESS);
+
+                        // Combined confidence that this is a green screen pixel
+                        const confidence = Math.min(1, hueFactor * satFactor * 0.7 + greenDominance * 0.6);
+
+                        // Set alpha: high confidence = fully transparent
+                        const alpha = Math.max(0, 1 - confidence);
                         data[i + 3] = Math.round(alpha * 255);
+
+                        // Despill: reduce green tint on semi-transparent edge pixels
+                        if (alpha > 0 && alpha < 0.9) {
+                            const avgRB = (r + b) / 2;
+                            data[i + 1] = Math.round(g * alpha + avgRB * (1 - alpha));
+                        }
                     }
                 }
 
@@ -3205,42 +3320,64 @@
                 if (videoHideTimer) { clearTimeout(videoHideTimer); videoHideTimer = null; }
                 stopChromaLoop();
 
-                const videoUrl = DATA_BASE_URL + videoFile;
-
-                videoEl.pause();
-                videoEl.src = videoUrl;
-                videoEl.currentTime = 0;
-                videoEl.muted = true;
-
-                // Size canvas to match stadium section dimensions
-                const stadiumEl = document.querySelector('.stadium-section');
-                if (stadiumEl && canvas) {
-                    canvas.width = stadiumEl.offsetWidth || 430;
-                    canvas.height = stadiumEl.offsetHeight || 220;
+                // Hide the text score in stadium
+                const lastBallCenterEl = document.getElementById('lastBallCenter');
+                if (lastBallCenterEl) {
+                    lastBallCenterEl.style.visibility = 'hidden';
                 }
 
-                videoEl.load();
-                videoEl.play().then(() => {
-                    videoOverlay.classList.add('visible');
-                    chromaRafId = requestAnimationFrame(drawChromaFrame);
-                    console.log(`[VIDEO] Playing (chroma key): ${videoFile} for ball: ${ballResult}`);
-                }).catch(err => {
-                    console.warn('[VIDEO] Play failed:', err.message);
-                });
+                const animUrl = DATA_BASE_URL + videoFile;
 
-                videoEl.onended = () => {
-                    stopChromaLoop();
-                    videoOverlay.classList.remove('visible');
-                    videoEl.src = '';
-                    lastPlayedBallKey = null;
-                };
+                // Stop any existing video/GIF
+                videoEl.pause();
+                videoEl.src = '';
+                if (gifEl) {
+                    gifEl.src = '';
+                    gifEl.style.display = 'none';
+                }
 
+                // Hide canvas, show Lottie animation
+                if (canvas) canvas.style.display = 'none';
+
+                // Load and play Lottie animation
+                if (lottieEl) {
+                    lottieEl.style.display = 'block';
+
+                    // Destroy previous animation if exists
+                    if (lottieAnim) {
+                        lottieAnim.destroy();
+                        lottieAnim = null;
+                    }
+
+                    // Create new Lottie animation
+                    lottieAnim = lottieLight.loadAnimation({
+                        container: lottieEl,
+                        renderer: 'svg',
+                        loop: false,
+                        autoplay: true,
+                        path: animUrl
+                    });
+
+                    lottieAnim.addEventListener('complete', () => {
+                        // Hide animation after it completes
+                        if (lottieEl) lottieEl.style.display = 'none';
+                        if (lastBallCenterEl) lastBallCenterEl.style.visibility = 'visible';
+                        lastPlayedBallKey = null;
+                    });
+                }
+
+                videoOverlay.classList.add('visible');
+                console.log(`[LOTTIE] Playing: ${videoFile} for ball: ${ballResult}`);
+
+                // Fallback hide after 5 seconds if complete event doesn't fire
                 videoHideTimer = setTimeout(() => {
+                    if (lottieEl) lottieEl.style.display = 'none';
+                    if (lastBallCenterEl) lastBallCenterEl.style.visibility = 'visible';
                     stopChromaLoop();
                     videoOverlay.classList.remove('visible');
-                    videoEl.pause();
-                    videoEl.src = '';
-                }, 8000);
+                    if (canvas) canvas.style.display = 'block';
+                    lastPlayedBallKey = null;
+                }, 5000);
             }
 
             // ===== HOOK: MutationObserver on lastBallCenter =====
@@ -3280,6 +3417,29 @@
             }
         </script>
 
+        <!-- Background Crowd Audio -->
+        <audio id="crowdAudio" src="Crowd_Noise.mp3" loop autoplay></audio>
+        <script>
+            document.addEventListener("DOMContentLoaded", () => {
+                const crowdAudio = document.getElementById("crowdAudio");
+                if (crowdAudio) {
+                    crowdAudio.volume = 0.5; // Set reasonable volume
+                    // Attempt to play audio on load
+                    const playPromise = crowdAudio.play();
+                    if (playPromise !== undefined) {
+                        playPromise.catch(error => {
+                            console.log("Autoplay was prevented. Attaching play to first click.", error);
+                            // Add a one-time click listener to doc to enable audio
+                            const enableAudio = () => {
+                                crowdAudio.play();
+                                document.removeEventListener("click", enableAudio);
+                            };
+                            document.addEventListener("click", enableAudio);
+                        });
+                    }
+                }
+            });
+        </script>
 </body>
 
 </html>

@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cricket Score Overlay</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Roboto+Mono:wght@400;500;700&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Oswald', sans-serif;
+            background: transparent;
+            overflow: hidden;
+        }
+
+        .overlay-container {
+            position: relative;
+            width: 100vw;
+            height: 80px;
+            background: linear-gradient(180deg, rgba(20, 20, 40, 0.95) 0%, rgba(10, 10, 30, 0.9) 100%);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 30px;
+            border-top: 3px solid #e63946;
+        }
+
+        /* Team Section */
+        .team {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 200px;
+        }
+
+        .team-left {
+            justify-content: flex-start;
+        }
+
+        .team-right {
+            justify-content: flex-end;
+        }
+
+        .team-name {
+            font-size: 28px;
+            font-weight: 700;
+            color: #fff;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .team-name span {
+            color: #4cc9f0;
+        }
+
+        /* Score Section */
+        .score-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+
+        .score-main {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+        }
+
+        .score-runs {
+            font-family: 'Roboto Mono', monospace;
+            font-size: 42px;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .score-separator {
+            font-size: 28px;
+            color: #888;
+        }
+
+        .score-wickets {
+            font-family: 'Roboto Mono', monospace;
+            font-size: 32px;
+            font-weight: 600;
+            color: #e63946;
+        }
+
+        .over-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-top: 2px;
+        }
+
+        .over-number {
+            font-family: 'Roboto Mono', monospace;
+            font-size: 18px;
+            color: #4cc9f0;
+            font-weight: 500;
+        }
+
+        .run-rate {
+            font-family: 'Roboto Mono', monospace;
+            font-size: 16px;
+            color: #888;
+        }
+
+        .run-rate span {
+            color: #fff;
+        }
+
+        /* Live indicator */
+        .live-badge {
+            background: #e63946;
+            color: #fff;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 3px 8px;
+            border-radius: 3px;
+            margin-left: 10px;
+            animation: pulse 1.5s infinite;
+            letter-spacing: 1px;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.6;
+            }
+        }
+
+        /* Last ball indicator */
+        .last-ball {
+            position: absolute;
+            bottom: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(20, 20, 40, 0.95);
+            padding: 4px 15px;
+            border-radius: 0 0 5px 5px;
+            border: 1px solid #333;
+            border-top: none;
+        }
+
+        .last-ball-number {
+            font-family: 'Roboto Mono', monospace;
+            font-size: 20px;
+            font-weight: 700;
+            color: #4cc9f0;
+        }
+
+        .last-ball-number.wicket {
+            color: #e63946;
+        }
+
+        .last-ball-number.six {
+            color: #00e676;
+        }
+
+        .last-ball-number.four {
+            color: #ff6b6b;
+        }
+
+        .last-ball-number.wide {
+            color: #ffa502;
+        }
+
+        /* Batters Section */
+        .batters-section {
+            position: absolute;
+            bottom: -60px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+            background: rgba(20, 20, 40, 0.95);
+            padding: 10px 20px;
+            border-radius: 0 0 10px 10px;
+            border: 1px solid #333;
+            border-top: none;
+        }
+
+        .batter {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .batter-name {
+            font-size: 14px;
+            color: #fff;
+            font-weight: 500;
+        }
+
+        .batter-score {
+            font-family: 'Roboto Mono', monospace;
+            font-size: 16px;
+            color: #4cc9f0;
+            font-weight: 600;
+        }
+
+        .batter-striker {
+            position: relative;
+        }
+
+        .batter-striker::after {
+            content: '🏏';
+            position: absolute;
+            top: -8px;
+            right: -12px;
+            font-size: 10px;
+        }
+
+        /* Bowler Section */
+        .bowler-section {
+            position: absolute;
+            top: 85px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(20, 20, 40, 0.95);
+            padding: 8px 20px;
+            border-radius: 10px 10px 0 0;
+            border: 1px solid #333;
+            border-bottom: none;
+        }
+
+        .bowler-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .bowler-name {
+            font-size: 14px;
+            color: #fff;
+            font-weight: 500;
+        }
+
+        .bowler-overs {
+            font-family: 'Roboto Mono', monospace;
+            font-size: 14px;
+            color: #ffa502;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="overlay-container" id="scoreOverlay">
+        <!-- Left Team -->
+        <div class="team team-left">
+            <span class="team-name" id="team1Name">PAK</span>
+        </div>
+
+        <!-- Score Section -->
+        <div class="score-section">
+            <div class="score-main">
+                <span class="score-runs" id="scoreRuns">0</span>
+                <span class="score-separator">/</span>
+                <span class="score-wickets" id="scoreWickets">0</span>
+                <span class="live-badge">LIVE</span>
+            </div>
+            <div class="over-info">
+                <span class="over-number" id="overNumber">0.0</span>
+                <span class="run-rate">RR: <span id="runRate">0.00</span></span>
+            </div>
+        </div>
+
+        <!-- Right Team -->
+        <div class="team team-right">
+            <span class="team-name" id="team2Name">IND</span>
+        </div>
+
+        <!-- Last Ball -->
+        <div class="last-ball" id="lastBall" style="display: none;">
+            <span class="last-ball-number" id="lastBallValue">0</span>
+        </div>
+
+        <!-- Batters -->
+        <div class="batters-section" id="battersSection" style="display: none;">
+            <div class="batter batter-striker" id="strikerBatter">
+                <span class="batter-name" id="strikerName">Batsman 1</span>
+                <span class="batter-score" id="strikerScore">0(0)</span>
+            </div>
+            <div class="batter" id="nonStrikerBatter">
+                <span class="batter-name" id="nonStrikerName">Batsman 2</span>
+                <span class="batter-score" id="nonStrikerScore">0(0)</span>
+            </div>
+        </div>
+
+        <!-- Bowler -->
+        <div class="bowler-section" id="bowlerSection" style="display: none;">
+            <div class="bowler-info">
+                <span class="bowler-name" id="bowlerName">Bowler</span>
+                <span class="bowler-overs" id="bowlerOvers">0.0</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const SOCKET_URL = (window.location.protocol === 'file:')
+            ? 'http://localhost:5555'
+            : window.location.origin;
+
+        const socket = io(SOCKET_URL);
+
+        // Elements
+        const team1Name = document.getElementById('team1Name');
+        const team2Name = document.getElementById('team2Name');
+        const scoreRuns = document.getElementById('scoreRuns');
+        const scoreWickets = document.getElementById('scoreWickets');
+        const overNumber = document.getElementById('overNumber');
+        const runRate = document.getElementById('runRate');
+        const lastBall = document.getElementById('lastBall');
+        const lastBallValue = document.getElementById('lastBallValue');
+        const battersSection = document.getElementById('battersSection');
+        const strikerName = document.getElementById('strikerName');
+        const strikerScore = document.getElementById('strikerScore');
+        const nonStrikerName = document.getElementById('nonStrikerName');
+        const nonStrikerScore = document.getElementById('nonStrikerScore');
+        const bowlerSection = document.getElementById('bowlerSection');
+        const bowlerName = document.getElementById('bowlerName');
+        const bowlerOvers = document.getElementById('bowlerOvers');
+
+        // Listen for score updates
+        socket.on('score', (data) => {
+            if (!data) return;
+
+            try {
+                updateScore(data);
+            } catch (e) {
+                console.error('Score update error:', e);
+            }
+        });
+
+        function updateScore(data) {
+            // Update teams
+            if (data.team1 && data.team1.shortName) {
+                team1Name.textContent = data.team1.shortName;
+            }
+            if (data.team2 && data.team2.shortName) {
+                team2Name.textContent = data.team2.shortName;
+            }
+
+            // Update score
+            const innings = data.innings && data.innings[0];
+            if (innings) {
+                scoreRuns.textContent = innings.runs || 0;
+                scoreWickets.textContent = innings.wickets || 0;
+
+                // Over calculation
+                const overs = Math.floor((innings.balls || 0) / 6);
+                const balls = (innings.balls || 0) % 6;
+                overNumber.textContent = `${overs}.${balls}`;
+
+                // Run rate
+                const rr = innings.runRate || 0;
+                runRate.textContent = rr.toFixed(2);
+            }
+
+            // Update batters
+            if (data.miniscore && data.miniscore.batsmen) {
+                const batters = data.miniscore.batsmen;
+                if (batters.length > 0) {
+                    battersSection.style.display = 'flex';
+
+                    strikerName.textContent = (batters[0].name || '').split(' ').pop();
+                    strikerScore.textContent = `${batters[0].runs || 0}(${batters[0].balls || 0})`;
+
+                    if (batters.length > 1) {
+                        nonStrikerName.textContent = (batters[1].name || '').split(' ').pop();
+                        nonStrikerScore.textContent = `${batters[1].runs || 0}(${batters[1].balls || 0})`;
+                    }
+                }
+            }
+
+            // Update bowler
+            if (data.miniscore && data.miniscore.bowler) {
+                bowlerSection.style.display = 'block';
+                const bowler = data.miniscore.bowler;
+                bowlerName.textContent = (bowler.name || '').split(' ').pop();
+                bowlerOvers.textContent = `${bowler.overs || '0.0'}`;
+            }
+
+            // Update last ball
+            if (data.miniscore && data.miniscore.lastBall) {
+                lastBall.style.display = 'block';
+                const lb = data.miniscore.lastBall;
+
+                lastBallValue.textContent = lb;
+                lastBallValue.className = 'last-ball-number';
+
+                if (lb === 'W' || lb.includes('W')) {
+                    lastBallValue.classList.add('wicket');
+                } else if (lb === '6') {
+                    lastBallValue.classList.add('six');
+                } else if (lb === '4') {
+                    lastBallValue.classList.add('four');
+                } else if (lb === 'WD' || lb === 'NB') {
+                    lastBallValue.classList.add('wide');
+                }
+            }
+        }
+
+        console.log('[Score Overlay] Connected and listening for updates');
+    </script>
+</body>
+
+</html>
