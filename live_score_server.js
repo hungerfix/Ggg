@@ -2042,7 +2042,7 @@ const server = http.createServer(async (req, res) => {
     } else if (pathname === '/set-match') {
       const newUrl = parsedUrl.query.url;
       const provider = detectProvider(newUrl);
-      if (newUrl && (provider === 'cricbuzz' || provider === 'crex' || provider === 'cfll' || provider === 'hero')) {
+      if (newUrl && (provider === 'cricbuzz' || provider === 'crex' || provider === 'cfll' || provider === 'hero' || provider === 'cricketmazza')) {
         matchUrl = newUrl;
         console.log(`\n[MATCH CHANGED] Provider: ${provider} | New URL: ${matchUrl}`);
         // Fetch immediately with new URL
@@ -2050,13 +2050,14 @@ const server = http.createServer(async (req, res) => {
           if (provider === 'crex') { await fetchCrexScore(); }
           else if (provider === 'cfll') { await fetchCfllScore(); }
           else if (provider === 'hero') { await fetchHeroLiveLine(); }
+          else if (provider === 'cricketmazza') { await fetchCricketMazzaScore(); }
           else { await fetchCricbuzzScore(); }
         } catch (e) { }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, provider: provider, matchUrl: matchUrl, message: 'Match URL updated! Score will refresh shortly.' }));
       } else {
         res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Invalid URL. Must be a cricbuzz.com, crex.com, cricketfastliveline.in, or heroliveline.com URL.' }));
+        res.end(JSON.stringify({ error: 'Invalid URL. Must be a cricbuzz.com, crex.com, cricketfastliveline.in, heroliveline.com, or cricketmazza.com URL.' }));
       }
 
       // Get current match URL
