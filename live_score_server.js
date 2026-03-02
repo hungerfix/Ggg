@@ -5,6 +5,7 @@ const path = require('path');
 const url = require('url');
 const zlib = require('zlib');
 const { Server } = require('socket.io');
+const { JSDOM } = require('jsdom');
 
 // ========== CRASH PROTECTION ==========
 process.on('uncaughtException', (err) => {
@@ -23,6 +24,7 @@ function detectProvider(u) {
   if (u.includes('crex.com')) return 'crex';
   if (u.includes('heroliveline.com')) return 'hero';
   if (u.includes('cricketfastliveline.in')) return 'cfll';
+  if (u.includes('cricketmazza.com')) return 'cricketmazza';
   return 'cricbuzz';
 }
 
@@ -1440,6 +1442,298 @@ async function fetchHeroLiveLine() {
   }
 }
 
+// ========== CRICKETMAZZA.COM PROVIDER ==========
+
+function extractCricketMazzaMatchId(mazzaUrl) {
+  const m = mazzaUrl.match(/\/live\/(\d+)/);
+  return m ? m[1] : null;
+}
+
+async function fetchCricketMazzaScore() {
+  try {
+    console.log(`\n[CRICKETMAZZA] Fetching at ${new Date().toLocaleTimeString()}...`);
+
+    const matchId = extractCricketMazzaMatchId(matchUrl);
+    if (!matchId) {
+      scoreData.error = 'Could not extract match ID from CricketMazza URL';
+      return;
+    }
+
+    const dataUrl = `https://www.cricketmazza.com/live/champion_live_matchData/${matchId}`;
+    const html = await fetchUrl(dataUrl);
+
+    if (!html || html.length < 200) {
+      console.log('  HTML too small, using cached data');
+      return;
+    }
+
+    // Parse the HTML fragment with jsdom
+    const dom = new JSDOM(html);
+    const doc = dom.window.document;
+
+    scoreData.provider = 'cricketmazza';
+
+    // ---- Match name (e.g. "CD vs WEL") ----
+    const matchNameEl = doc.querySelector('div.liveinfo-heading h2') || doc.querySelector('.liveinfo-heading h2');
+    const matchName = matchNameEl ? matchNameEl.textContent.trim() : '--';
+
+    // ---- Match details (e.g. "14th Match, Plunket Shield") ----
+    const matchDetailEl = doc.querySelector('div.livelist-box-text') || doc.querySelector('.livelist-box-text');
+    const matchDetail = matchDetailEl ? matchDetailEl.textContent.trim() : '';
+
+    // ---- Match status (e.g. "Day 3: Stumps") ----
+    const statusEl = doc.querySelector('h1.blink-soft');
+    const matchStatus = statusEl ? statusEl.textContent.trim() : '';
+
+    // ---- Toss info ----
+    const tossEl = doc.querySelector('div.recent-won-text');
+    const tossInfo = tossEl ? tossEl.textContent.trim() : '';
+
+    // ---- Team names ----
+    const teamEls = doc.querySelectorAll('h2.playing-team');
+    const team1Name = teamEls.length > 0 ? teamEls[0].textContent.trim() : '--';
+    const team2Name = teamEls.length > 1 ? teamEls[1].textContent.trim() : '--';
+
+    // ---- Scores: format is <span>(overs)</span>runs-wickets ----
+    const scoreEls = doc.querySelectorAll('h2.score-playing');
+    const parseScoreEl = (el) => {
+      if (!el) return { score: 0, wickets: 0, overs: 0, raw: '' };
+      const spanEl = el.querySelector('span');
+      const oversStr = spanEl ? spanEl.textContent.replace(/[()]/g, '').trim() : '0';
+      // Get the text without the span (score part)
+      const fullText = el.textContent.trim();
+      // Score part is after the overs, e.g. "(90.4)296-10" -> "296-10"
+      const scorePart = fullText.replace(/\([^)]*\)/g, '').trim();
+      // Handle multiple innings in one element like "401-10 & 86-4"
+      const inningsParts = scorePart.split('&').map(s => s.trim());
+      const oversRaw = el.innerHTML;
+      // Handle multiple overs too e.g. "(113.3 & 25.1)"
+      const oversFullStr = spanEl ? spanEl.textContent.replace(/[()]/g, '').trim() : '0';
+      const oversParts = oversFullStr.split('&').map(s => s.trim());
+
+      const innings = [];
+      for (let i = 0; i < inningsParts.length; i++) {
+        const sp = inningsParts[i].split('-');
+        innings.push({
+          score: parseInt(sp[0]) || 0,
+          wickets: parseInt(sp[1]) || 0,
+          overs: parseFloat(oversParts[i] || oversParts[0]) || 0
+        });
+      }
+      return innings;
+    };
+
+    const team1Innings = scoreEls.length > 0 ? parseScoreEl(scoreEls[0]) : [];
+    const team2Innings = scoreEls.length > 1 ? parseScoreEl(scoreEls[1]) : [];
+
+    // Build short names from match name (e.g. "CD vs WEL" -> "CD", "WEL")
+    const nameParts = matchName.split(/\s+vs\s+/i);
+    const team1Short = nameParts.length > 0 ? nameParts[0].trim() : team1Name.substring(0, 3).toUpperCase();
+    const team2Short = nameParts.length > 1 ? nameParts[1].trim() : team2Name.substring(0, 3).toUpperCase();
+
+    // ---- Match Info ----
+    scoreData.matchInfo = {
+      description: matchDetail || `${team1Name} vs ${team2Name}`,
+      format: '',
+      status: matchStatus,
+      venue: '',
+      state: matchStatus.toLowerCase().includes('stumps') || matchStatus.toLowerCase().includes('complete') ? 'Complete' : 'In Progress',
+      toss: tossInfo,
+      result: matchStatus
+    };
+
+    // ---- Teams ----
+    scoreData.team1 = {
+      name: team1Name,
+      shortName: team1Short,
+      id: 0,
+      flagUrl: '',
+      jerseyUrl: '',
+      gradient: ''
+    };
+    scoreData.team2 = {
+      name: team2Name,
+      shortName: team2Short,
+      id: 0,
+      flagUrl: '',
+      jerseyUrl: '',
+      gradient: ''
+    };
+
+    // ---- Build Innings array ----
+    const innings = [];
+    let innId = 1;
+    for (const inn of team1Innings) {
+      innings.push({
+        id: innId++,
+        battingTeamId: 0,
+        battingTeam: team1Name,
+        battingTeamShort: team1Short,
+        score: inn.score,
+        wickets: inn.wickets,
+        overs: inn.overs,
+        isDeclared: false,
+        runRate: inn.overs > 0 ? (inn.score / inn.overs).toFixed(2) : '0.00'
+      });
+    }
+    for (const inn of team2Innings) {
+      innings.push({
+        id: innId++,
+        battingTeamId: 0,
+        battingTeam: team2Name,
+        battingTeamShort: team2Short,
+        score: inn.score,
+        wickets: inn.wickets,
+        overs: inn.overs,
+        isDeclared: false,
+        runRate: inn.overs > 0 ? (inn.score / inn.overs).toFixed(2) : '0.00'
+      });
+    }
+    scoreData.innings = innings;
+    scoreData.currentInnings = innings.length;
+
+    // ---- Parse Batter table ----
+    const tables = doc.querySelectorAll('div.live_score_table table.table-bordered');
+    let batsmanStriker = null;
+    let batsmanNonStriker = null;
+    let bowlerStriker = null;
+
+    if (tables.length > 0) {
+      const batTable = tables[0];
+      const batRows = batTable.querySelectorAll('tbody tr');
+      batRows.forEach((row, idx) => {
+        const cells = row.querySelectorAll('td');
+        if (cells.length >= 6) {
+          const nameCell = cells[0];
+          const isStriker = nameCell.querySelector('span.red') !== null;
+          const name = nameCell.textContent.replace('*', '').trim();
+          const batsman = {
+            name: name,
+            fullName: name,
+            runs: parseInt(cells[1].textContent.trim()) || 0,
+            balls: parseInt(cells[2].textContent.trim()) || 0,
+            fours: parseInt(cells[3].textContent.trim()) || 0,
+            sixes: parseInt(cells[4].textContent.trim()) || 0,
+            strikeRate: parseFloat(cells[5].textContent.trim()) || 0
+          };
+          if (isStriker || idx === 0) {
+            if (!batsmanStriker) batsmanStriker = batsman;
+            else if (!batsmanNonStriker) batsmanNonStriker = batsman;
+          } else {
+            if (!batsmanNonStriker) batsmanNonStriker = batsman;
+            else if (!batsmanStriker) batsmanStriker = batsman;
+          }
+        }
+      });
+    }
+
+    // ---- Parse Bowler table ----
+    if (tables.length > 1) {
+      const bowlTable = tables[1];
+      const bowlRows = bowlTable.querySelectorAll('tbody tr');
+      if (bowlRows.length > 0) {
+        const cells = bowlRows[0].querySelectorAll('td');
+        if (cells.length >= 6) {
+          bowlerStriker = {
+            name: cells[0].textContent.trim(),
+            fullName: cells[0].textContent.trim(),
+            overs: cells[1].textContent.trim(),
+            maidens: parseInt(cells[2].textContent.trim()) || 0,
+            runs: parseInt(cells[3].textContent.trim()) || 0,
+            wickets: parseInt(cells[4].textContent.trim()) || 0,
+            economy: parseFloat(cells[5].textContent.trim()) || 0,
+            figures: `${parseInt(cells[4].textContent.trim()) || 0}-${parseInt(cells[3].textContent.trim()) || 0}`
+          };
+        }
+      }
+    }
+
+    // ---- Partnership ----
+    let partnershipRuns = 0;
+    let partnershipBalls = 0;
+    const allH2s = doc.querySelectorAll('h2');
+    allH2s.forEach(h2 => {
+      const text = h2.textContent.trim();
+      if (text.includes('Partnership')) {
+        const pMatch = text.match(/Partnership\s*:\s*(\d+)\s*\((\d+)\)/);
+        if (pMatch) {
+          partnershipRuns = parseInt(pMatch[1]) || 0;
+          partnershipBalls = parseInt(pMatch[2]) || 0;
+        }
+      }
+    });
+
+    // ---- Last Wicket ----
+    let lastWicket = null;
+    const nextBtsmEls = doc.querySelectorAll('h2.next_btsm');
+    nextBtsmEls.forEach(el => {
+      const text = el.textContent.trim();
+      if (text.includes('Last Wicket')) {
+        const lwMatch = text.match(/Last Wicket:\s*(.+?)\s+(\d+)\s*\((\d+)\)/);
+        if (lwMatch) {
+          lastWicket = {
+            name: lwMatch[1].trim(),
+            runs: lwMatch[2],
+            balls: `(${lwMatch[3]})`
+          };
+        }
+      }
+    });
+
+    // ---- Current innings stats ----
+    const currentInn = innings.length > 0 ? innings[innings.length - 1] : { score: 0, wickets: 0, overs: 0 };
+    const crr = currentInn.overs > 0 ? (currentInn.score / currentInn.overs).toFixed(2) : '0.00';
+
+    // ---- Miniscore ----
+    scoreData.miniscore = {
+      inningsId: innings.length,
+      battingTeam: {
+        id: 0,
+        score: currentInn.score || 0,
+        wickets: currentInn.wickets || 0
+      },
+      batsmanStriker: batsmanStriker,
+      batsmanNonStriker: batsmanNonStriker,
+      bowlerStriker: bowlerStriker,
+      bowlerNonStriker: null,
+      overs: currentInn.overs || 0,
+      target: 0,
+      partnership: {
+        runs: partnershipRuns,
+        balls: partnershipBalls
+      },
+      currentRunRate: parseFloat(crr) || 0,
+      requiredRunRate: 0,
+      lastWicket: lastWicket,
+      recentOvers: '',
+      event: '',
+      remRunsToWin: 0,
+      oversRemaining: null,
+      status: matchStatus
+    };
+
+    scoreData.timestamp = new Date().toISOString();
+    scoreData.error = null;
+
+    // Log summary
+    console.log(`  [CRICKETMAZZA] Match: ${matchName}`);
+    if (innings.length > 0) {
+      innings.forEach(inn => {
+        console.log(`  Innings ${inn.id}: ${inn.battingTeamShort} ${inn.score}/${inn.wickets} (${inn.overs} ov)`);
+      });
+    }
+    if (batsmanStriker) console.log(`  Bat*: ${batsmanStriker.name} ${batsmanStriker.runs}(${batsmanStriker.balls})`);
+    if (batsmanNonStriker) console.log(`  Bat : ${batsmanNonStriker.name} ${batsmanNonStriker.runs}(${batsmanNonStriker.balls})`);
+    if (bowlerStriker) console.log(`  Bowl: ${bowlerStriker.name} ${bowlerStriker.figures} (${bowlerStriker.overs} ov)`);
+    console.log(`  CRR: ${crr}`);
+    console.log(`  Status: ${matchStatus || 'Live'}`);
+
+  } catch (e) {
+    scoreData.error = 'CricketMazza fetch error: ' + e.message;
+    console.error('[CRICKETMAZZA] Fetch error:', e.message);
+  }
+}
+
 // ========== CRICBUZZ.COM PROVIDER ==========
 async function fetchCricbuzzScore() {
   try {
@@ -2032,6 +2326,8 @@ async function start() {
       await fetchCfllScore();
     } else if (provider === 'hero') {
       await fetchHeroLiveLine();
+    } else if (provider === 'cricketmazza') {
+      await fetchCricketMazzaScore();
     } else {
       await fetchCricbuzzScore();
     }
