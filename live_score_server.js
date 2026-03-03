@@ -55,7 +55,9 @@ let ttsEnabled = true;
 let lastReadCommentaryEvent = null; // Track last read commentary to avoid repeats
 let lastProcessedBallKey = null; // Robust tracking: over.ball
 let lastReadCommentaryText = null;
-let lastBallData = { event: '', runs: 0, isBoundary: false, isWicket: false, raw: '', timestamp: null };
+let lastBallData = { event: '', runs: 0, isBoundary: false, isWicket: false, raw: '', timestamp: null, over: 0, ball: 0 };
+let lastBallKey = '';
+let lastBallTimestamp = 0;
 
 const PORT = process.env.PORT || 5555;
 
@@ -2065,8 +2067,15 @@ const server = http.createServer(async (req, res) => {
       res.end(jsonStr);
 
     } else if (pathname === '/lastball') {
+      const now = Date.now();
+      const isStale = (now - lastBallTimestamp) > 10000;
+
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(lastBallData, null, 2));
+      if (isStale) {
+        res.end(JSON.stringify({ ...lastBallData, event: 'NONE', isStale: true }, null, 2));
+      } else {
+        res.end(JSON.stringify({ ...lastBallData, isStale: false }, null, 2));
+      }
 
       // Serve HTML overlay files publicly
     } else if (pathname === '/overlay') {
@@ -2343,6 +2352,11 @@ function normaliseLastBall() {
   const ms = scoreData.miniscore || {};
   let last = '';
 
+  // Extract current over and ball (e.g. from 15.4)
+  const overStr = String(ms.overs || '0.0');
+  const [currentOverNum, currentBallNum] = overStr.split('.').map(n => parseInt(n) || 0);
+  const currentKey = `${currentOverNum}.${currentBallNum}`;
+
   // 1. Try structured overByOver (Mazza, CREX, CFLL)
   if (ms.overByOver && ms.overByOver.length > 0) {
     const currentOver = ms.overByOver[ms.overByOver.length - 1];
@@ -2353,11 +2367,8 @@ function normaliseLastBall() {
 
   // 2. Try recentOvers string parsing (Fallback)
   if (!last && ms.recentOvers) {
-    // Handle "Over 45: 1 2 4 | Over 46: 0 1" or "1,2,3,4" or "1 2 3 4"
-    // Also handle CREX style with totals: "Over 20: 0 0 0 1 0 0 = 1"
     const blocks = ms.recentOvers.split('|');
     const lastBlock = blocks[blocks.length - 1];
-    // Remove anything after '=' if present
     const cleanBlock = lastBlock.split('=')[0];
     const balls = cleanBlock.includes(':') ? cleanBlock.split(':')[1] : cleanBlock;
     const items = balls.split(/[ ,]+/).filter(i => i.trim());
@@ -2370,15 +2381,18 @@ function normaliseLastBall() {
   if (!last && scoreData.recentCommentary && scoreData.recentCommentary.length > 0) {
     const latest = scoreData.recentCommentary[0];
     if (latest.event === 'WICKET') last = 'W';
-    else if (latest.event === 'FOUR' || latest.event === 'BOUNDARY' && latest.runs === 4) last = '4';
+    else if (latest.event === 'FOUR' || (latest.event === 'BOUNDARY' && latest.runs === 4)) last = '4';
     else if (latest.event === 'SIX' && latest.runs === 6) last = '6';
     else if (latest.runs) last = String(latest.runs);
   }
 
-  if (last) {
+  if (last && currentKey !== lastBallKey) {
     const clean = String(last).trim().toLowerCase();
     const runs = parseInt(clean) || 0;
+
     lastBallData = {
+      over: currentOverNum,
+      ball: currentBallNum,
       event: clean === 'w' ? 'WICKET' : (clean === '6' ? 'SIX' : (clean === '4' ? 'FOUR' : (clean.includes('wd') ? 'WIDE' : (clean.includes('nb') ? 'NO BALL' : (runs > 0 ? 'RUNS' : 'DOT'))))),
       runs: runs,
       isBoundary: clean === '4' || clean === '6',
@@ -2386,9 +2400,11 @@ function normaliseLastBall() {
       raw: String(last).trim(),
       timestamp: scoreData.timestamp
     };
-    console.log(`  [LASTBALL] Normalised: ${lastBallData.raw} -> ${lastBallData.event} (${lastBallData.runs} runs)`);
-  } else {
-    console.log('  [LASTBALL] Could not extract last ball from any source');
+
+    lastBallKey = currentKey;
+    lastBallTimestamp = Date.now();
+
+    console.log(`  [LASTBALL] New delivery ${currentKey}: ${lastBallData.raw} -> ${lastBallData.event}`);
   }
 }
 
