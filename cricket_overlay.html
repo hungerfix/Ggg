@@ -835,27 +835,28 @@
         /* Floodlight towers */
         .fl-tower {
             position: absolute;
-            bottom: 60px;
-            width: 4px;
+            bottom: clamp(20px, 15%, 60px);
+            width: clamp(2px, 1vw, 4px);
             background: linear-gradient(180deg, #334, #1a2540);
             border-radius: 2px;
+            z-index: 1;
         }
 
         .fl-tower.left {
-            left: 30px;
-            height: 110px;
+            left: 8%;
+            height: clamp(50px, 40%, 110px);
         }
 
         .fl-tower.right {
-            right: 30px;
-            height: 110px;
+            right: 8%;
+            height: clamp(50px, 40%, 110px);
         }
 
         .fl-head {
             position: absolute;
             top: 0;
-            width: 30px;
-            height: 8px;
+            width: clamp(15px, 4vw, 30px);
+            height: clamp(4px, 1.2vw, 8px);
             background: #445;
             border-radius: 2px;
             left: 50%;
@@ -864,7 +865,7 @@
 
         .fl-beam {
             position: absolute;
-            top: 8px;
+            top: clamp(4px, 1.2vw, 8px);
             width: 0;
             height: 0;
             left: 50%;
@@ -872,16 +873,16 @@
         }
 
         .fl-beam.left-beam {
-            border-left: 80px solid transparent;
+            border-left: clamp(40px, 10vw, 80px) solid transparent;
             border-right: 0px solid transparent;
-            border-top: 160px solid rgba(255, 220, 100, 0.06);
+            border-top: clamp(80px, 20vw, 160px) solid rgba(255, 220, 100, 0.08);
             animation: beamFlicker 2s ease-in-out infinite;
         }
 
         .fl-beam.right-beam {
-            border-right: 80px solid transparent;
+            border-right: clamp(40px, 10vw, 80px) solid transparent;
             border-left: 0px solid transparent;
-            border-top: 160px solid rgba(255, 220, 100, 0.06);
+            border-top: clamp(80px, 20vw, 160px) solid rgba(255, 220, 100, 0.08);
             animation: beamFlicker 2s ease-in-out infinite 0.5s;
         }
 
@@ -900,42 +901,45 @@
         /* Ground / Pitch */
         .ground-ellipse {
             position: absolute;
-            bottom: -10px;
+            bottom: -5%;
             left: 50%;
             transform: translateX(-50%);
             width: clamp(200px, 75vw, 450px);
             height: clamp(60px, 9vh, 120px);
             background: radial-gradient(ellipse, #3a7030 0%, #2a5a22 50%, #1a3a14 100%);
             border-radius: 50%;
-            box-shadow: 0 0 40px rgba(46, 140, 50, 0.3), inset 0 -10px 30px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 0 clamp(10px, 2vw, 40px) rgba(46, 140, 50, 0.3), inset 0 clamp(-3px, -1vh, -10px) clamp(10px, 3vh, 30px) rgba(0, 0, 0, 0.5);
+            z-index: 2;
         }
 
         .pitch-strip {
             position: absolute;
-            bottom: 20px;
+            bottom: 15%;
             left: 50%;
             transform: translateX(-50%);
-            width: 50px;
-            height: 60px;
+            width: clamp(25px, 8vw, 50px);
+            height: clamp(30px, 25%, 60px);
             background: linear-gradient(180deg, #c8a84a, #a08030);
             border-radius: 4px;
-            opacity: 0.7;
+            opacity: 0.8;
+            z-index: 3;
         }
 
         /* Stumps */
         .stumps {
             position: absolute;
-            bottom: 28px;
+            bottom: max(15%, 15px);
             left: 50%;
             transform: translateX(-50%);
             display: flex;
-            gap: 3px;
+            gap: clamp(1px, 0.4vw, 3px);
+            z-index: 4;
         }
 
         .stump {
-            width: 2px;
-            height: 14px;
-            background: #ddd;
+            width: clamp(1px, 0.3vw, 2px);
+            height: clamp(8px, 2vh, 14px);
+            background: #e0e0e0;
             border-radius: 1px;
         }
 
