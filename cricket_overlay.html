@@ -31,22 +31,29 @@
             --pak-green: #01411C;
         }
 
+        html,
         body {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            /* STRICTLY Prevent all scrollbars */
             background: radial-gradient(ellipse at center, #0a1628 0%, #020810 100%);
             display: flex;
             justify-content: center;
             align-items: center;
-            min-height: 100vh;
             font-family: 'Exo 2', sans-serif;
-            padding: 0;
-            margin: 0;
-            overflow: hidden;
+            box-sizing: border-box;
         }
 
         /* ===== MAIN CARD ===== */
         .card {
             width: 100vw;
             height: 100vh;
+            /* Fill exactly whatever viewport it gets */
+            max-width: 100%;
+            max-height: 100%;
             border-radius: 0;
             overflow: hidden;
             position: relative;
