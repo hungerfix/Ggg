@@ -1746,18 +1746,22 @@ async function fetchCricketMazzaScore() {
       ballEls.forEach(el => {
         const txt = el.textContent.trim();
         if (txt) {
-          // Normalise: wicket might be "W" or "w", boundaries are "4", "6"
           balls.push(txt);
         }
       });
       if (balls.length > 0) {
+        console.log(`  [CRICKETMAZZA] Found ${balls.length} balls in container`);
         scoreData.miniscore.recentOvers = balls.join(',');
         scoreData.miniscore.overByOver = [{
           over: 'Current',
           total: balls.reduce((acc, b) => acc + (parseInt(b) || 0), 0),
           overinfo: balls
         }];
+      } else {
+        console.log('  [CRICKETMAZZA] Last ten balls container found but empty');
       }
+    } else {
+      console.log('  [CRICKETMAZZA] Last ten balls container NOT found');
     }
 
     scoreData.timestamp = new Date().toISOString();
@@ -2373,15 +2377,18 @@ function normaliseLastBall() {
 
   if (last) {
     const clean = String(last).trim().toLowerCase();
+    const runs = parseInt(clean) || 0;
     lastBallData = {
-      event: clean === 'w' ? 'WICKET' : (clean === '6' ? 'SIX' : (clean === '4' ? 'FOUR' : (clean.includes('wd') ? 'WIDE' : (clean.includes('nb') ? 'NO BALL' : '')))),
-      runs: parseInt(clean) || 0,
+      event: clean === 'w' ? 'WICKET' : (clean === '6' ? 'SIX' : (clean === '4' ? 'FOUR' : (clean.includes('wd') ? 'WIDE' : (clean.includes('nb') ? 'NO BALL' : (runs > 0 ? 'RUNS' : 'DOT'))))),
+      runs: runs,
       isBoundary: clean === '4' || clean === '6',
       isWicket: clean === 'w' || clean.includes('w'),
       raw: String(last).trim(),
       timestamp: scoreData.timestamp
     };
-    console.log(`  [LASTBALL] Result: ${lastBallData.raw} (${lastBallData.event || 'dot'})`);
+    console.log(`  [LASTBALL] Normalised: ${lastBallData.raw} -> ${lastBallData.event} (${lastBallData.runs} runs)`);
+  } else {
+    console.log('  [LASTBALL] Could not extract last ball from any source');
   }
 }
 
