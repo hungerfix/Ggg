@@ -55,6 +55,7 @@ let ttsEnabled = true;
 let lastReadCommentaryEvent = null; // Track last read commentary to avoid repeats
 let lastProcessedBallKey = null; // Robust tracking: over.ball
 let lastReadCommentaryText = null;
+let lastBallData = { event: '', runs: 0, isBoundary: false, isWicket: false, raw: '', timestamp: null };
 
 const PORT = process.env.PORT || 5555;
 
@@ -2060,23 +2061,8 @@ const server = http.createServer(async (req, res) => {
       res.end(jsonStr);
 
     } else if (pathname === '/lastball') {
-      const ms = scoreData.miniscore || {};
-      const recent = ms.recentOvers || '';
-      const balls = recent.includes(',') ? recent.split(',') : (recent.includes('|') ? recent.split('|').pop().split(',') : recent.split(' '));
-      const last = balls.filter(b => b.trim()).pop() || '';
-      const clean = last.trim().toLowerCase();
-
-      const response = {
-        event: clean === 'w' ? 'WICKET' : (clean === '6' ? 'SIX' : (clean === '4' ? 'FOUR' : '')),
-        runs: parseInt(clean) || 0,
-        isBoundary: clean === '4' || clean === '6',
-        isWicket: clean === 'w' || clean.includes('w'),
-        raw: last.trim(),
-        timestamp: scoreData.timestamp
-      };
-
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(response, null, 2));
+      res.end(JSON.stringify(lastBallData, null, 2));
 
       // Serve HTML overlay files publicly
     } else if (pathname === '/overlay') {
@@ -2349,6 +2335,56 @@ function generateTTS(text) {
   }
 }
 
+function normaliseLastBall() {
+  const ms = scoreData.miniscore || {};
+  let last = '';
+
+  // 1. Try structured overByOver (Mazza, CREX, CFLL)
+  if (ms.overByOver && ms.overByOver.length > 0) {
+    const currentOver = ms.overByOver[ms.overByOver.length - 1];
+    if (currentOver.overinfo && currentOver.overinfo.length > 0) {
+      last = currentOver.overinfo[currentOver.overinfo.length - 1];
+    }
+  }
+
+  // 2. Try recentOvers string parsing (Fallback)
+  if (!last && ms.recentOvers) {
+    // Handle "Over 45: 1 2 4 | Over 46: 0 1" or "1,2,3,4" or "1 2 3 4"
+    // Also handle CREX style with totals: "Over 20: 0 0 0 1 0 0 = 1"
+    const blocks = ms.recentOvers.split('|');
+    const lastBlock = blocks[blocks.length - 1];
+    // Remove anything after '=' if present
+    const cleanBlock = lastBlock.split('=')[0];
+    const balls = cleanBlock.includes(':') ? cleanBlock.split(':')[1] : cleanBlock;
+    const items = balls.split(/[ ,]+/).filter(i => i.trim());
+    if (items.length > 0) {
+      last = items[items.length - 1];
+    }
+  }
+
+  // 3. Try commentary (Last resort)
+  if (!last && scoreData.recentCommentary && scoreData.recentCommentary.length > 0) {
+    const latest = scoreData.recentCommentary[0];
+    if (latest.event === 'WICKET') last = 'W';
+    else if (latest.event === 'FOUR' || latest.event === 'BOUNDARY' && latest.runs === 4) last = '4';
+    else if (latest.event === 'SIX' && latest.runs === 6) last = '6';
+    else if (latest.runs) last = String(latest.runs);
+  }
+
+  if (last) {
+    const clean = String(last).trim().toLowerCase();
+    lastBallData = {
+      event: clean === 'w' ? 'WICKET' : (clean === '6' ? 'SIX' : (clean === '4' ? 'FOUR' : (clean.includes('wd') ? 'WIDE' : (clean.includes('nb') ? 'NO BALL' : '')))),
+      runs: parseInt(clean) || 0,
+      isBoundary: clean === '4' || clean === '6',
+      isWicket: clean === 'w' || clean.includes('w'),
+      raw: String(last).trim(),
+      timestamp: scoreData.timestamp
+    };
+    console.log(`  [LASTBALL] Result: ${lastBallData.raw} (${lastBallData.event || 'dot'})`);
+  }
+}
+
 // Start server and periodic updates
 async function start() {
   // Match URL is optional at startup — user can set it from the dashboard
@@ -2398,6 +2434,9 @@ async function start() {
     } else {
       await fetchCricbuzzScore();
     }
+
+    // Normalise last ball state after any fetch
+    normaliseLastBall();
   }
 
   // Initial fetch if match URL is already set
