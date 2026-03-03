@@ -1489,19 +1489,41 @@ async function fetchCricketMazzaScore() {
     const tossEl = doc.querySelector('div.recent-won-text');
     const tossInfo = tossEl ? tossEl.textContent.trim() : '';
 
-    // ---- Team names ----
+    // ---- Team names and flags ----
     const teamEls = doc.querySelectorAll('h2.playing-team');
     const team1Name = teamEls.length > 0 ? teamEls[0].textContent.trim() : '--';
     const team2Name = teamEls.length > 1 ? teamEls[1].textContent.trim() : '--';
 
+    // ---- Team flag images: look for img tags near team info ----
+    const allImgs = doc.querySelectorAll('img');
+    let team1Flag = '';
+    let team2Flag = '';
+    const teamImgs = [];
+    allImgs.forEach(img => {
+      const src = img.getAttribute('src') || '';
+      if (src.includes('_team.') || src.includes('/teams/')) {
+        teamImgs.push(src);
+      }
+    });
+    if (teamImgs.length > 0) team1Flag = teamImgs[0];
+    if (teamImgs.length > 1) team2Flag = teamImgs[1];
+
+    // Helper: generate player avatar URL (matches cricketmazza's own pattern)
+    const mazzaPlayerImg = (name) => {
+      if (!name || name === '--') return '';
+      return `https://ui-avatars.com/api/?background=efefef&color=333333&name=${encodeURIComponent(name)}`;
+    };
+
     // ---- Scores: format is <span>(overs)</span>runs-wickets ----
     const scoreEls = doc.querySelectorAll('h2.score-playing');
     const parseScoreEl = (el) => {
-      if (!el) return { score: 0, wickets: 0, overs: 0, raw: '' };
+      if (!el) return [];
+      const fullText = el.textContent.trim();
+      if (!fullText) return [];
+
       const spanEl = el.querySelector('span');
       const oversStr = spanEl ? spanEl.textContent.replace(/[()]/g, '').trim() : '0';
       // Get the text without the span (score part)
-      const fullText = el.textContent.trim();
       // Score part is after the overs, e.g. "(90.4)296-10" -> "296-10"
       const scorePart = fullText.replace(/\([^)]*\)/g, '').trim();
       // Handle multiple innings in one element like "401-10 & 86-4"
@@ -1547,7 +1569,7 @@ async function fetchCricketMazzaScore() {
       name: team1Name,
       shortName: team1Short,
       id: 0,
-      flagUrl: '',
+      flagUrl: team1Flag,
       jerseyUrl: '',
       gradient: ''
     };
@@ -1555,7 +1577,7 @@ async function fetchCricketMazzaScore() {
       name: team2Name,
       shortName: team2Short,
       id: 0,
-      flagUrl: '',
+      flagUrl: team2Flag,
       jerseyUrl: '',
       gradient: ''
     };
@@ -1610,6 +1632,7 @@ async function fetchCricketMazzaScore() {
           const batsman = {
             name: name,
             fullName: name,
+            imageUrl: mazzaPlayerImg(name),
             runs: parseInt(cells[1].textContent.trim()) || 0,
             balls: parseInt(cells[2].textContent.trim()) || 0,
             fours: parseInt(cells[3].textContent.trim()) || 0,
@@ -1635,8 +1658,9 @@ async function fetchCricketMazzaScore() {
         const cells = bowlRows[0].querySelectorAll('td');
         if (cells.length >= 6) {
           bowlerStriker = {
-            name: cells[0].textContent.trim(),
-            fullName: cells[0].textContent.trim(),
+            name: cells[0].textContent.replace('*', '').trim(),
+            fullName: cells[0].textContent.replace('*', '').trim(),
+            imageUrl: mazzaPlayerImg(cells[0].textContent.replace('*', '').trim()),
             overs: cells[1].textContent.trim(),
             maidens: parseInt(cells[2].textContent.trim()) || 0,
             runs: parseInt(cells[3].textContent.trim()) || 0,
@@ -1706,11 +1730,34 @@ async function fetchCricketMazzaScore() {
       requiredRunRate: 0,
       lastWicket: lastWicket,
       recentOvers: '',
+      overByOver: [],
       event: '',
       remRunsToWin: 0,
       oversRemaining: null,
       status: matchStatus
     };
+
+    // ---- Parse Last 10 Balls ----
+    const lastBallsContainer = doc.querySelector('.last_ten_ball_container');
+    if (lastBallsContainer) {
+      const ballEls = lastBallsContainer.querySelectorAll('div');
+      const balls = [];
+      ballEls.forEach(el => {
+        const txt = el.textContent.trim();
+        if (txt) {
+          // Normalise: wicket might be "W" or "w", boundaries are "4", "6"
+          balls.push(txt);
+        }
+      });
+      if (balls.length > 0) {
+        scoreData.miniscore.recentOvers = balls.join(',');
+        scoreData.miniscore.overByOver = [{
+          over: 'Current',
+          total: balls.reduce((acc, b) => acc + (parseInt(b) || 0), 0),
+          overinfo: balls
+        }];
+      }
+    }
 
     scoreData.timestamp = new Date().toISOString();
     scoreData.error = null;
@@ -2011,6 +2058,25 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/score') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(jsonStr);
+
+    } else if (pathname === '/lastball') {
+      const ms = scoreData.miniscore || {};
+      const recent = ms.recentOvers || '';
+      const balls = recent.includes(',') ? recent.split(',') : (recent.includes('|') ? recent.split('|').pop().split(',') : recent.split(' '));
+      const last = balls.filter(b => b.trim()).pop() || '';
+      const clean = last.trim().toLowerCase();
+
+      const response = {
+        event: clean === 'w' ? 'WICKET' : (clean === '6' ? 'SIX' : (clean === '4' ? 'FOUR' : '')),
+        runs: parseInt(clean) || 0,
+        isBoundary: clean === '4' || clean === '6',
+        isWicket: clean === 'w' || clean.includes('w'),
+        raw: last.trim(),
+        timestamp: scoreData.timestamp
+      };
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(response, null, 2));
 
       // Serve HTML overlay files publicly
     } else if (pathname === '/overlay') {
