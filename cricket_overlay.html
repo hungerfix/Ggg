@@ -2500,10 +2500,30 @@
                 // --- Socket.io for TTS state + optional TTS playback ---
                 const socket = io(SOCKET_URL);
 
-                // Audio element refs (kept in case they are needed by other logic, but disabled auto-play button)
+                // Audio element refs
                 const ttsAudioEl = document.getElementById('ttsAudio');
                 const crowdAudioEl = document.getElementById('crowdAudio');
                 let audioEnabled = false;
+
+                function startBackgroundAudio() {
+                    if (audioEnabled || !crowdAudioEl) return;
+                    crowdAudioEl.volume = 0.3;
+                    const playPromise = crowdAudioEl.play();
+                    if (playPromise !== undefined) {
+                        playPromise.then(() => {
+                            audioEnabled = true;
+                            document.removeEventListener('click', startBackgroundAudio);
+                            console.log('[Audio] Background music started');
+                        }).catch((err) => {
+                            console.warn('[Audio] Autoplay prevented. Click anywhere on page to start music.');
+                        });
+                    }
+                }
+
+                // Attack to page click (for browsers with strict autoplay)
+                document.addEventListener('click', startBackgroundAudio);
+                // Attempt autoplay immediately (usually allowed in OBS)
+                startBackgroundAudio();
 
                 const REFRESH_MS = 2000;
                 const DEMO_FALLBACK_AFTER = 3;
